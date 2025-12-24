@@ -1,238 +1,33 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/types.h>
 #include <fcntl.h>
-#include <sys/wait.h>
+#include "commande.h"
 
-
-
-typedef enum
+int main(void)
 {
-    MOT,
-    TUB,
-    INF,
-    SUP,
-    SPP,
-    NL,
-    FIN
-} LEX;
-static LEX getlex(char *mot)
-{
-    enum
-    {
-        Neutre,
-        Spp,
-        Equote,
-        Emot
-    } etat = Neutre;
-    int c;
-    char *w;
-    w = mot;
-    while ((c = getchar()) != EOF)
-    {
-        switch (etat)
-        {
-        case Neutre:
-            switch (c)
-            {
-            case '<':
-                return (INF);
-            case '>':
-                etat = Spp;
-                continue;
-            case '|':
-                return (TUB);
-            case '"':
-                etat = Equote;
-                continue;
-            case ' ':
-            case '\t':
-                continue;
-            case '\n':
-                return (NL);
-            default:
-                etat = Emot;
-                *w++ = c;
-                continue;
-            }
-        case Spp:
-            if (c == '>')
-                return (SPP);
-            ungetc(c, stdin);
-            return (SUP);
-        case Equote:
-            switch (c)
-            {
-            case '\\':
-                *w++ = c;
-                continue;
-            case '"':
-                *w = '\0';
-                return (MOT);
-            default:
-                *w++ = c;
-                continue;
-            }
-        case Emot:
-            switch (c)
-            {
-            case '|':
-            case '<':
-            case '>':
-            case ' ':
-            case '\t':
-            case '\n':
-                ungetc(c, stdin);
-                *w = '\0';
-                return (MOT);
-            default:
-                *w++ = c;
-                continue;
-            }
-        }
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) == -1){
+            perror("gethostname");
+            strcpy(hostname, "?");
+    
     }
-    return (FIN);
-}
-int main(int argc, char *argv[])
-{
-    char mot[200];
-    //machine actuelle HOSTNAME + répertoire courant + $
-    char * path = getcwd(NULL, 0);
-    printf("%s$ ", path);
+    char cwd[1024];
 
     while (1)
-        
-        switch (getlex(mot))
-        {
-        case MOT:
-            printf("MOT: %s\n", mot);
-            execvp(mot, NULL); //exécuter la commande
-         
-            break;
-        case TUB:
-            printf("TUBE\n");
-          
-            break;
-        case INF:
-            printf("REDIRECTION ENTREE\n");
-          
-            break;
-        case SUP:
-            printf("REDIRECTION SORTIE\n");
-          
-            break;
-        case SPP:
-            printf("REDIRECTION AJOUT\n");
-            
-            break;
-        case NL:
-            printf("NOUVELLE LIGNE \n");
-            //exécuter la commande
-            
-            printf("%s$ ", path);
-            break;
-        case FIN:
-            printf("FIN \n");
-            exit(0);
-        }
-    return 0;
-
-}
-
-//Fonction qui traite une commande
-void commande(char *argv[])
-{
-    enum
     {
-        INF,
-        SUP,
-        SPP,
-        TUB,
-    } etat = INF;
-    //cas entrée par defaut fd=0
-    int fd = 0;
-    for (int i = 0; argv[i] != NULL; i++)
-    {
-        switch (etat)
+        if (getcwd(cwd, sizeof(cwd)) == NULL)
         {
-        case INF:
-            if (strcmp(argv[i], "<") == 0)
-            {
-                etat = SPP;
-                continue;
-            }
-            else
-            {
-                fd = open(argv[i], O_RDONLY);
-                dup2(fd, 0);
-                close(fd);
-            }
-            break;
-        case SUP:
-            if (strcmp(argv[i], ">") == 0)
-            {
-                etat = SPP;
-                continue;
-            }
-            else
-            {
-                fd = open(argv[i], O_WRONLY
-                                | O_CREAT
-                                | O_TRUNC,
-                            0644);
-                dup2(fd, 1);
-                close(fd);
-            }
-            break;
-        case SPP:
-            if (strcmp(argv[i], ">") == 0)
-            {
-                etat = TUB;
-                continue;
-            }
-            else
-            {
-                fd = open(argv[i], O_WRONLY
-                                | O_CREAT
-                                | O_APPEND,
-                            0644);
-                dup2(fd, 1);
-                close(fd);
-            }
-            break;
-        case TUB:
-            if (strcmp(argv[i], "|") == 0)
-            {
-                etat = INF;
-                continue;
-            }
-            else
-            {
-                int pid = fork();
-                if (pid == 0)
-                {
-                    //fils
-                    dup2(fd, 0);
-                    close(fd);
-                    execlp(argv[i], argv[i], NULL);
-                    exit(0);
-                }
-                else
-                {
-                    //pere
-                    wait(NULL);
-                    close(fd);
-                    int pipefd[2];
-                    pipe(pipefd);
-                    fd = pipefd[0];
-                    dup2(pipefd[1], 1);
-                    close(pipefd[1]);
-                }
-            }
-            break;
+            perror("getcwd");
+            strcpy(cwd, "?");
         }
+
+        printf("%s:%s$ ", hostname, cwd);
+        fflush(stdout);
+
+        commande();
     }
-    execlp(argv[0], argv[0], NULL);
-    exit(0);
+
+    return 0;
 }
